@@ -1,1 +1,1 @@
-const VAULT = null; // replaced by setup.html
+const VAULT = {"salt":"eSDjrK9YjAO6j7/qIR/njA==","iv":"Ri+BSOsmS3cbpa6B","ct":"zNmXbMwoP5yILDi9VGMQCgxdT0XMhCZFClaeWz7NrdE/ojFt4H/pKrfEnLhFe2rxllmKEfzj5H3/33HhL/Tw//DXIz7Y5bfp9P8stGO8QoT6vQrJYNTTjq8SIMUv5sVXC4dZkrhnx7tKwa5NMA=="};
