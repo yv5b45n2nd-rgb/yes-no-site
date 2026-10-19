@@ -3,38 +3,57 @@
 <title>Admin</title><link rel="stylesheet" href="assets/style.css"></head>
 <body><main>
 <h1>Admin</h1>
-<div class="switch"><button id="sw" role="switch" aria-checked="false" aria-label="Status" disabled></button><span id="label">…</span></div>
+<div id="lock"><div class="row"><input id="pw" type="password" placeholder="Password" autocomplete="current-password"><button class="btn" id="unlock">Unlock</button></div></div>
+<div id="panel" hidden>
+<div class="switch"><button id="sw" role="switch" aria-checked="false" aria-label="Status"></button><span id="label">…</span></div>
+<p class="sub">The public page updates within 1-2 minutes after a change.</p>
+</div>
 <p id="msg"></p>
-<h2>GitHub token</h2>
-<p class="sub">A fine-grained token limited to this repository with Contents: read and write. It is stored only in this browser.</p>
-<div class="row"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off">
-<button class="btn" id="save">Save token</button><button class="btn alt" id="forget">Forget</button></div>
 </main>
+<script src="assets/vault.js"></script>
 <script src="assets/common.js"></script>
 <script>
 nav('admin.html');
-const $=id=>document.getElementById(id),sw=$('sw'),msg=$('msg');
-const tk=()=>localStorage.getItem('gh_token')||'';
+const $=id=>document.getElementById(id),msg=$('msg'),sw=$('sw'),enc=new TextEncoder(),dec=new TextDecoder();
+const u8=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const b64=s=>btoa(unescape(encodeURIComponent(s))),unb64=s=>decodeURIComponent(escape(atob(s.replace(/\n/g,''))));
+let TOKEN=sessionStorage.getItem('adm')||'';
+const hdr=()=>({Authorization:'Bearer '+TOKEN,Accept:'application/vnd.github+json'});
 function show(on){sw.setAttribute('aria-checked',on);$('label').textContent=on?CFG.yes:CFG.no}
-function ready(){sw.disabled=!tk()||!CFG.owner;if(!CFG.owner)msg.textContent='Open this page from your github.io address so the repository can be detected.';else if(!tk())msg.textContent='Add your token to enable the switch.'}
-$('save').onclick=()=>{localStorage.setItem('gh_token',$('tok').value.trim());$('tok').value='';msg.textContent='Token saved.';ready()};
-$('forget').onclick=()=>{localStorage.removeItem('gh_token');msg.textContent='Token removed.';ready()};
-async function init(){try{show(current(await loadHistory()).status)}catch(e){msg.textContent='Could not load status.'}ready()}
+async function decrypt(pw){
+  const m=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveKey']);
+  const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:u8(VAULT.salt),iterations:200000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['decrypt']);
+  return dec.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:u8(VAULT.iv)},k,u8(VAULT.ct)));
+}
+async function open(){
+  $('lock').hidden=true;$('panel').hidden=false;msg.textContent='';
+  try{
+    const r=await fetch(apiUrl()+'?ref='+CFG.branch,{headers:hdr(),cache:'no-store'});
+    if(!r.ok)throw 0;
+    show(current(JSON.parse(unb64((await r.json()).content))).status);
+  }catch(e){msg.textContent='Could not read the current status.'}
+}
+async function tryUnlock(){
+  if(typeof VAULT==='undefined'||!VAULT){msg.textContent='Setup is not finished yet. Run setup.html first.';return}
+  msg.textContent='Checking…';
+  try{TOKEN=await decrypt($('pw').value);sessionStorage.setItem('adm',TOKEN);await open()}
+  catch(e){msg.textContent='Wrong password.'}
+}
+$('unlock').onclick=tryUnlock;
+$('pw').onkeydown=e=>{if(e.key==='Enter')tryUnlock()};
 sw.onclick=async()=>{
   sw.disabled=true;msg.textContent='Saving…';
   try{
-    const h={Authorization:'Bearer '+tk(),Accept:'application/vnd.github+json'};
-    const r=await fetch(apiUrl()+'?ref='+CFG.branch,{headers:h,cache:'no-store'});
-    if(!r.ok)throw new Error('Read failed ('+r.status+'). Check the token and repository access.');
+    const r=await fetch(apiUrl()+'?ref='+CFG.branch,{headers:hdr(),cache:'no-store'});
+    if(!r.ok)throw new Error('Read failed ('+r.status+').');
     const f=await r.json(),hist=JSON.parse(unb64(f.content));
     const next=!current(hist).status;
     hist.push({status:next,at:new Date().toISOString()});
-    const p=await fetch(apiUrl(),{method:'PUT',headers:h,body:JSON.stringify({message:'Status: '+(next?CFG.yes:CFG.no),content:b64(JSON.stringify(hist,null,1)+'\n'),sha:f.sha,branch:CFG.branch})});
-    if(!p.ok)throw new Error('Write failed ('+p.status+'). The token needs Contents: read and write.');
-    show(next);msg.textContent='Saved. Everyone now sees '+(next?CFG.yes:CFG.no)+'.';
+    const p=await fetch(apiUrl(),{method:'PUT',headers:hdr(),body:JSON.stringify({message:'Status: '+(next?CFG.yes:CFG.no),content:b64(JSON.stringify(hist,null,1)+'\n'),sha:f.sha,branch:CFG.branch})});
+    if(!p.ok)throw new Error('Write failed ('+p.status+'). The token may have expired.');
+    show(next);msg.textContent='Saved. Everyone will see '+(next?CFG.yes:CFG.no)+' shortly.';
   }catch(e){msg.textContent=e.message}
-  ready();
+  sw.disabled=false;
 };
-init();
+if(TOKEN)open();
 </script></body></html>

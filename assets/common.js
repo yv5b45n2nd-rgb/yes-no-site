@@ -11,15 +11,11 @@ const CFG = { owner: null, repo: null, branch: 'main', file: 'data/history.json'
 })();
 const apiUrl = () => `https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.file}`;
 
-// Reads straight from the GitHub API so changes show up immediately (no wait for a Pages rebuild).
+// Public pages read the static copy served by GitHub Pages (no API rate limit).
+// After a change it appears once Pages has rebuilt, usually within 1-2 minutes.
 async function loadHistory() {
-  if (CFG.owner) {
-    try {
-      const r = await fetch(apiUrl() + `?ref=${CFG.branch}`, { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
-      if (r.ok) return await r.json();
-    } catch (e) {}
-  }
-  const r = await fetch(CFG.file + '?t=' + Date.now(), { cache: 'no-store' });
+  const r = await fetch(CFG.file + '?t=' + Math.floor(Date.now() / 30000), { cache: 'no-store' });
+  if (!r.ok) throw new Error('load failed');
   return r.json();
 }
 const sorted = h => [...h].sort((a, b) => new Date(a.at) - new Date(b.at));

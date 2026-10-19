@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Setup</title><link rel="stylesheet" href="assets/style.css"></head>
+<body><main>
+<h1>One-time setup</h1>
+<p class="sub">Paste your GitHub token and choose the password the facility team will use. The token is encrypted in your browser with that password and saved as assets/vault.js in the repository. After that, the password alone unlocks the admin page.</p>
+<p><label>GitHub token<br><input id="tok" type="password" autocomplete="off"></label></p>
+<p><label>Password<br><input id="pw" type="text" autocomplete="off"></label></p>
+<div class="row"><button class="btn" id="go">Encrypt and save</button></div>
+<p id="msg"></p>
+<script src="assets/common.js"></script>
+<script>
+const $=id=>document.getElementById(id),msg=$('msg'),enc=new TextEncoder();
+const b=u=>btoa(String.fromCharCode(...u));
+$('go').onclick=async()=>{
+  const tok=$('tok').value.trim(),pw=$('pw').value;
+  if(!tok||!pw){msg.textContent='Enter both a token and a password.';return}
+  if(!CFG.owner){msg.textContent='Open this page from your github.io address.';return}
+  msg.textContent='Working…';
+  try{
+    const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+    const m=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveKey']);
+    const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt']);
+    const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},k,enc.encode(tok)));
+    const js='const VAULT = '+JSON.stringify({salt:b(salt),iv:b(iv),ct:b(ct)})+';\n';
+    const url=`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/assets/vault.js`;
+    const h={Authorization:'Bearer '+tok,Accept:'application/vnd.github+json'};
+    const g=await fetch(url+'?ref='+CFG.branch,{headers:h});
+    const sha=g.ok?(await g.json()).sha:undefined;
+    const p=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify({message:'Add vault',content:btoa(js),sha,branch:CFG.branch})});
+    if(!p.ok)throw new Error('Save failed ('+p.status+'). Check the token has Contents: read and write for this repository.');
+    msg.textContent='Saved. In 1-2 minutes the admin page will accept the password. You can delete setup.html from the repository now.';
+    $('tok').value='';
+  }catch(e){msg.textContent=e.message}
+};
+</script></main></body></html>
