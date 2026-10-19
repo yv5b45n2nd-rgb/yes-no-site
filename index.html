@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>…</title><link rel="stylesheet" href="assets/style.css"></head>
+<body><main class="hero">
+<h1 class="answer" id="answer">…</h1>
+<p class="sub" id="since"></p>
+</main>
+<script src="assets/common.js"></script>
+<script>
+nav('index.html');
+async function render(){
+  try{
+    const c=current(await loadHistory());
+    const el=document.getElementById('answer');
+    el.textContent=c.status?CFG.yes:CFG.no;
+    el.className='answer '+(c.status?'yes':'no');
+    document.title=el.textContent;
+    document.getElementById('since').textContent='Since '+fmtDate(c.at);
+  }catch(e){document.getElementById('since').textContent='Could not load status.'}
+}
+render();setInterval(render,30000);
+</script></body></html>

@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>History</title><link rel="stylesheet" href="assets/style.css"></head>
+<body><main>
+<h1>History</h1>
+<div class="cards" id="cards"></div>
+<h2>Last 12 months</h2>
+<div class="chart" id="chart"></div><div class="labels" id="labels"></div>
+<p class="legend">Share of each month spent on YES (green), NO (red) or before tracking began (grey).</p>
+<h2>By year</h2>
+<table><thead><tr><th>Year</th><th>YES</th><th>NO</th><th>% YES</th><th>Changes</th></tr></thead><tbody id="years"></tbody></table>
+</main>
+<script src="assets/common.js"></script>
+<script>
+nav('stats.html');
+const iv=h=>{const e=sorted(h);return e.map((x,i)=>({s:+new Date(x.at),e:i+1<e.length?+new Date(e[i+1].at):Date.now(),v:x.status}))};
+const tally=(I,a,b)=>{let y=0,n=0;for(const i of I){const o=Math.min(i.e,b)-Math.max(i.s,a);if(o>0){i.v?y+=o:n+=o}}return{y,n}};
+const pct=t=>t.y+t.n?Math.round(100*t.y/(t.y+t.n))+'%':'–';
+(async()=>{
+  const h=await loadHistory(),I=iv(h),c=current(h),now=new Date(),first=I[0].s;
+  const mStart=new Date(now.getFullYear(),now.getMonth(),1),mt=tally(I,+mStart,+now);
+  const card=(b,s)=>`<div class="card"><b>${b}</b><span>${s}</span></div>`;
+  const draw=()=>{document.getElementById('cards').innerHTML=
+    card(c.status?CFG.yes:CFG.no,'current status')+
+    card(fmtDur(Date.now()-+new Date(c.at)),'active for')+
+    card(fmtDate(c.at),'last change')+
+    card(h.length-1,'changes in total')+
+    card(pct(tally(I,+mStart,Date.now())),'YES this month')};
+  draw();setInterval(draw,60000);
+  let cols='',labs='';
+  for(let k=11;k>=0;k--){
+    const a=new Date(now.getFullYear(),now.getMonth()-k,1),b=new Date(a.getFullYear(),a.getMonth()+1,1);
+    const end=Math.min(+b,Date.now()),t=tally(I,+a,end),span=end-+a;
+    const y=100*t.y/span,n=100*t.n/span,u=Math.max(0,100-y-n);
+    cols+=`<div class="col" title="${a.toLocaleString(undefined,{month:'long',year:'numeric'})}: ${pct(t)} YES"><i class="u" style="height:${u}%"></i><i class="n" style="height:${n}%"></i><i class="y" style="height:${y}%"></i></div>`;
+    labs+=`<div>${a.toLocaleString(undefined,{month:'short'})}</div>`;
+  }
+  document.getElementById('chart').innerHTML=cols;document.getElementById('labels').innerHTML=labs;
+  let rows='';
+  for(let yr=now.getFullYear();yr>=new Date(first).getFullYear();yr--){
+    const t=tally(I,+new Date(yr,0,1),Math.min(+new Date(yr+1,0,1),Date.now()));
+    const ch=h.filter(x=>new Date(x.at).getFullYear()===yr).length-(new Date(first).getFullYear()===yr?1:0);
+    rows+=`<tr><td>${yr}</td><td>${fmtDur(t.y)}</td><td>${fmtDur(t.n)}</td><td>${pct(t)}</td><td>${ch}</td></tr>`;
+  }
+  document.getElementById('years').innerHTML=rows;
+})().catch(()=>{document.getElementById('cards').textContent='Could not load history.'});
+</script></body></html>
